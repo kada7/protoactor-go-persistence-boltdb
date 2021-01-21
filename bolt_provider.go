@@ -1,6 +1,7 @@
 package boltdb
 
 import (
+	"bytes"
 	"encoding/binary"
 	"fmt"
 	"sync"
@@ -108,7 +109,7 @@ func (provider *BoltProvider) PersistSnapshot(actorName string, eventIndex int, 
 }
 
 //GetEvents execute callback for each event in store for actor after event index
-func (provider *BoltProvider) GetEvents(actorName string, eventIndexStart int, callback func(e interface{})) {
+func (provider *BoltProvider) GetEvents(actorName string, eventIndexStart int, eventIndexEnd int, callback func(e interface{})) {
 	events := []proto.Message{}
 
 	err := provider.db.View(func(tx *bolt.Tx) error {
@@ -126,12 +127,16 @@ func (provider *BoltProvider) GetEvents(actorName string, eventIndexStart int, c
 
 		//get events after index
 		c := e.Cursor()
+		end := encodeInt(eventIndexEnd)
 		for k, v := c.Seek(encodeInt(eventIndexStart)); k != nil; k, v = c.Next() {
 			event, err := cUnmarshal(v)
 			if err != nil {
 				panic(err)
 			}
 			events = append(events, event)
+			if bytes.Equal(k, end) {
+				break
+			}
 		}
 
 		return nil
@@ -175,6 +180,12 @@ func (provider *BoltProvider) PersistEvent(actorName string, eventIndex int, eve
 		panic(err)
 	}
 
+}
+
+func (provider *BoltProvider) DeleteSnapshots(actorName string, inclusiveToIndex int) {
+}
+
+func (provider *BoltProvider) DeleteEvents(actorName string, inclusiveToIndex int) {
 }
 
 func encodeInt(i int) []byte {
