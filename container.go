@@ -7,7 +7,6 @@ import (
 
 	"encoding/gob"
 
-	gogoproto "github.com/gogo/protobuf/proto"
 	"github.com/golang/protobuf/proto"
 )
 
@@ -17,8 +16,8 @@ type container struct {
 }
 
 func cMarshal(m proto.Message) ([]byte, error) {
-	typeName := gogoproto.MessageName(m)
-	bs, err := gogoproto.Marshal(m)
+	typeName := proto.MessageName(m)
+	bs, err := proto.Marshal(m)
 	if err != nil {
 		return nil, fmt.Errorf("failed to marshal proto message: %v", err)
 	}
@@ -45,13 +44,13 @@ func cUnmarshal(b []byte) (proto.Message, error) {
 		return nil, fmt.Errorf("failed to unmarshal container: %v", err)
 	}
 
-	protoType := gogoproto.MessageType(c.T)
+	protoType := proto.MessageType(c.T)
 	if protoType == nil {
 		return nil, fmt.Errorf("unknown proto message type %s", c.T)
 	}
 	t := protoType.Elem()
 	intPtr := reflect.New(t)
-	instance := intPtr.Interface().(gogoproto.Message)
+	instance := intPtr.Interface().(proto.Message)
 	err = proto.Unmarshal(c.V, instance)
 	if err != nil {
 		return nil, fmt.Errorf("failed to unmarshal proto message: %v", err)

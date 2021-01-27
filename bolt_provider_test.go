@@ -132,26 +132,27 @@ func TestBoltProvider(t *testing.T) {
 		t.Run(fmt.Sprintf("case-%d", i), func(t *testing.T) {
 			actorName := fmt.Sprintf("%s.%d", ActorName, i)
 
-			props := actor.FromProducer(makeActor(t)).
-				WithMiddleware(persistence.Using(tc.init))
+			props := actor.PropsFromProducer(makeActor(t)).
+				WithReceiverMiddleware(persistence.Using(tc.init))
 
 			mod = "orig"
-			pid, err := actor.SpawnNamed(props, actorName)
+			sys := actor.NewActorSystem()
+			pid, err := sys.Root.SpawnNamed(props, actorName)
 			noError(t, "spawn actor", err)
 
 			// send a bunch of messages
 			for _, msg := range tc.msgs {
-				pid.Tell(&Event{State: msg})
+				sys.Root.Send(pid, &Event{State: msg})
 			}
 
 			queryWg.Add(1)
-			pid.Tell(&Query{})
+			sys.Root.Send(pid, &Query{})
 			queryWg.Wait()
 			// check the state after all these messages
 			equal(t, "spawned actor last message", tc.afterMsgs, queryState[actorName])
 
 			// wait for shutdown
-			pid.GracefulPoison()
+			sys.Root.Send(pid, &actor.PoisonPill{})
 			//close bolt db, but don't delete it
 			tc.init.db.Close()
 
@@ -165,24 +166,25 @@ func TestBoltProvider(t *testing.T) {
 			state := boltdb.NewBoltProvider(tc.init.snapshotInterval, db)
 			ds := &dataStore{providerState: state, db: db, tpath: tc.init.tpath}
 
-			props = actor.FromProducer(makeActor(t)).
-				WithMiddleware(persistence.Using(ds))
+			props = actor.PropsFromProducer(makeActor(t)).
+				WithReceiverMiddleware(persistence.Using(ds))
 
 			if err != nil {
 				t.Fatalf("failed to reopen db: %v", err)
 			}
 
-			pid, err = actor.SpawnNamed(props, actorName)
+			root := actor.NewActorSystem().Root
+			pid, err = root.SpawnNamed(props, actorName)
 			noError(t, "respawn actor", err)
 
 			queryWg.Add(1)
-			pid.Tell(&Query{})
+			root.Send(pid, &Query{})
 			queryWg.Wait()
 			// check the state after all these messages
 			equal(t, "respawned actor last message", tc.afterMsgs, queryState[actorName])
 
 			// shutdown at end of test for cleanup
-			pid.GracefulPoison()
+			root.Send(pid, &actor.PoisonPill{})
 			tc.init.Close()
 		})
 	}

@@ -76,28 +76,29 @@ func ExampleBoltProvider() {
 
 	wg := &sync.WaitGroup{}
 
-	props := actor.FromProducer(exampleActorProducer).
-		WithMiddleware(
+	root := actor.NewActorSystem().Root
+	props := actor.PropsFromProducer(exampleActorProducer).
+		WithReceiverMiddleware(
 			persistence.Using(newExampleDataStore(4, db)),
 		)
 
-	pid, err := actor.SpawnNamed(props, "example.actor")
+	pid, err := root.SpawnNamed(props, "example.actor")
 	if err != nil {
 		panic(err)
 	}
 
 	//Send some messages to persist
 	for index := 0; index < 10; index++ {
-		pid.Tell(&Event{State: fmt.Sprintf("event-%d", index)})
+		root.Send(pid, &Event{State: fmt.Sprintf("event-%d", index)})
 	}
 
 	//tell actor to print its state
 	wg.Add(1)
-	pid.Tell(&Print{wg: wg})
+	root.Send(pid, &Print{wg: wg})
 	wg.Wait()
 
 	//stop actor, close db and reopen it
-	pid.GracefulPoison()
+	root.Send(pid, &actor.PoisonPill{})
 	db.Close()
 
 	//reopen db and respawn actor
@@ -106,23 +107,24 @@ func ExampleBoltProvider() {
 		panic(err)
 	}
 
-	props = actor.FromProducer(exampleActorProducer).
-		WithMiddleware(
+	root = actor.NewActorSystem().Root
+	props = actor.PropsFromProducer(exampleActorProducer).
+		WithReceiverMiddleware(
 			persistence.Using(newExampleDataStore(4, db)),
 		)
 
-	pid, err = actor.SpawnNamed(props, "example.actor")
+	pid, err = root.SpawnNamed(props, "example.actor")
 	if err != nil {
 		panic(err)
 	}
 
 	//tell actor to print its state
 	wg.Add(1)
-	pid.Tell(&Print{wg: wg})
+	root.Send(pid, &Print{wg: wg})
 	wg.Wait()
 
 	//stop actor, close db and reopen it
-	pid.GracefulPoison()
+	root.Send(pid, &actor.PoisonPill{})
 	db.Close()
 
 	// Output:
